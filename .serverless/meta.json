@@ -1,0 +1,204 @@
+{
+  "/Users/amnaejaz/Documents/repos/personal/borderless-passport-reader": {
+    "versionSfCore": null,
+    "versionFramework": "4.4.14",
+    "isWithinCompose": false,
+    "isCompose": false,
+    "composeOrgName": null,
+    "composeServiceName": null,
+    "servicePath": "/Users/amnaejaz/Documents/repos/personal/borderless-passport-reader",
+    "serviceConfigFileName": "serverless.yml",
+    "service": {
+      "service": "borderless-passport-reader",
+      "provider": {
+        "name": "aws",
+        "runtime": "nodejs20.x",
+        "region": "us-west-1"
+      },
+      "functions": {
+        "test_hello": {
+          "handler": "dist/test_hello.handler",
+          "environment": {
+            "QUEUE_URL": {
+              "Ref": "TestQueue"
+            }
+          },
+          "events": [
+            {
+              "http": {
+                "path": "hello",
+                "method": "get"
+              }
+            }
+          ],
+          "iamRoleStatements": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "TestQueue",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        },
+        "message_received": {
+          "handler": "dist/message_received.handler",
+          "environment": {
+            "DATABASE_HOST": "database-2.c56m0o4qy882.us-west-1.rds.amazonaws.com",
+            "DATABASE_PORT": "5432",
+            "DATABASE_NAME": "postgres",
+            "DATABASE_USER": "postgres",
+            "DATABASE_PASSWORD": "<REDACTED>"
+          },
+          "events": [
+            {
+              "sqs": {
+                "arn": {
+                  "Fn::GetAtt": [
+                    "TestQueue",
+                    "Arn"
+                  ]
+                },
+                "batchSize": 1
+              }
+            }
+          ]
+        },
+        "upload_image_to_s3": {
+          "handler": "dist/upload_image_to_s3.handler",
+          "events": [
+            {
+              "http": {
+                "path": "upload",
+                "method": "post",
+                "contentHandling": "CONVERT_TO_BINARY"
+              }
+            }
+          ],
+          "environment": {
+            "BUCKET_NAME": "${self:custom.s3BucketName}",
+            "PAYLOAD_QUEUE_URL": {
+              "Ref": "PayloadQueue"
+            }
+          },
+          "iamRoleStatements": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "s3:PutObject"
+              ],
+              "Resource": {
+                "Fn::Join": [
+                  "",
+                  [
+                    {
+                      "Fn::GetAtt": [
+                        "ImageBucket",
+                        "Arn"
+                      ]
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": {
+                "Fn::GetAtt": [
+                  "PayloadQueue",
+                  "Arn"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "resources": {
+        "Resources": {
+          "TestQueue": {
+            "Type": "AWS::SQS::Queue",
+            "Properties": {
+              "QueueName": "borderless-passport-reader-test-queue"
+            }
+          },
+          "PayloadQueue": {
+            "Type": "AWS::SQS::Queue",
+            "Properties": {
+              "QueueName": "borderless-passport-reader-payload-queue"
+            }
+          },
+          "ImageBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+              "BucketName": "${self:custom.s3BucketName}",
+              "CorsConfiguration": {
+                "CorsRules": [
+                  {
+                    "AllowedHeaders": [
+                      "*"
+                    ],
+                    "AllowedMethods": [
+                      "PUT",
+                      "POST",
+                      "GET"
+                    ],
+                    "AllowedOrigins": [
+                      "*"
+                    ],
+                    "MaxAge": 3000
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "custom": {
+        "s3BucketName": "borderless-passport-reader-images-${aws:accountId}"
+      }
+    },
+    "serviceRawFile": "service: borderless-passport-reader\n\nprovider:\n  name: aws\n  runtime: nodejs20.x\n  region: us-west-1\n\nfunctions:\n  test_hello:\n    handler: dist/test_hello.handler\n    environment:\n      QUEUE_URL: !Ref TestQueue\n    events:\n      - http:\n          path: hello\n          method: get\n    iamRoleStatements:\n      - Effect: Allow\n        Action:\n          - sqs:SendMessage\n        Resource: !GetAtt TestQueue.Arn\n\n  message_received:\n    handler: dist/message_received.handler\n    environment:\n      DATABASE_HOST: database-2.c56m0o4qy882.us-west-1.rds.amazonaws.com\n      DATABASE_PORT: \"5432\"\n      DATABASE_NAME: postgres\n      DATABASE_USER: postgres\n      DATABASE_PASSWORD: postgres\n    events:\n      - sqs:\n          arn: !GetAtt TestQueue.Arn\n          batchSize: 1\n\n  upload_image_to_s3:\n    handler: dist/upload_image_to_s3.handler\n    events:\n      - http:\n          path: upload\n          method: post\n          contentHandling: CONVERT_TO_BINARY\n    environment:\n      BUCKET_NAME: ${self:custom.s3BucketName}\n      PAYLOAD_QUEUE_URL: !Ref PayloadQueue\n    iamRoleStatements:\n      - Effect: Allow\n        Action:\n          - s3:PutObject\n        Resource: !Join ['', [!GetAtt ImageBucket.Arn, '/*']]\n      - Effect: Allow\n        Action:\n          - sqs:SendMessage\n        Resource: !GetAtt PayloadQueue.Arn\n\nresources:\n  Resources:\n    TestQueue:\n      Type: AWS::SQS::Queue\n      Properties:\n        QueueName: ${self:service}-test-queue\n\n    PayloadQueue:\n      Type: AWS::SQS::Queue\n      Properties:\n        QueueName: ${self:service}-payload-queue\n\n    ImageBucket:\n      Type: AWS::S3::Bucket\n      Properties:\n        BucketName: ${self:custom.s3BucketName}\n        CorsConfiguration:\n          CorsRules:\n            - AllowedHeaders: ['*']\n              AllowedMethods: [PUT, POST, GET]\n              AllowedOrigins: ['*']\n              MaxAge: 3000\n\ncustom:\n  s3BucketName: ${self:service}-images-${aws:accountId}\n",
+    "command": [
+      "offline"
+    ],
+    "options": {},
+    "error": {
+      "message": "Failed to resolve variable 'accountId' with resolver 'ssm' and provider 'default-aws-credential-resolver': InvalidClientTokenId: The security token included in the request is invalid.",
+      "stack": "Error: Failed to resolve variable 'accountId' with resolver 'ssm' and provider 'default-aws-credential-resolver': InvalidClientTokenId: The security token included in the request is invalid.\n    at #resolveKey (file:///Users/amnaejaz/.serverless/releases/4.4.14/package/dist/sf-core.js:693:51356)\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async _ResolverManager.resolve (file:///Users/amnaejaz/.serverless/releases/4.4.14/package/dist/sf-core.js:693:56775)\n    at async #handlePlaceholderNode (file:///Users/amnaejaz/.serverless/releases/4.4.14/package/dist/sf-core.js:693:55518)\n    at async file:///Users/amnaejaz/.serverless/releases/4.4.14/package/dist/sf-core.js:693:53510\n    at async processNodeAndHandleCompletion (file:///Users/amnaejaz/.serverless/releases/4.4.14/package/dist/sf-core.js:693:44152)",
+      "code": "RESOLVER_RESOLVE_VARIABLE_ERROR"
+    },
+    "machineId": "e5d12a9dae26961a738baeb307089006",
+    "stage": "dev",
+    "accessKeyV2": "<REDACTED>",
+    "accessKeyV1": "<REDACTED>",
+    "orgId": "15bb1d7a-545d-49c0-a9aa-66011d246126",
+    "orgName": "borderlessldn",
+    "userId": "nvYfZb9xtCqTzCr65S",
+    "dashboard": {
+      "isEnabledForService": false,
+      "requiredAuthentication": false,
+      "orgFeaturesInUse": null,
+      "orgObservabilityIntegrations": null,
+      "serviceAppId": null,
+      "serviceProvider": null,
+      "instanceParameters": null
+    },
+    "userName": "borderlessldn",
+    "subscription": null,
+    "userEmail": "amnaejaz.tech@gmail.com",
+    "serviceProviderAwsCfStackId": null,
+    "serviceProviderAwsCfStackCreated": null,
+    "serviceProviderAwsCfStackUpdated": null,
+    "serviceProviderAwsCfStackStatus": null,
+    "serviceProviderAwsCfStackOutputs": null
+  }
+}

@@ -1,0 +1,110 @@
+service: borderless-passport-reader
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  region: eu-west-2
+  stage: dev
+  timeout: 30
+  apiGateway:
+    binaryMediaTypes:
+      - 'multipart/form-data'
+
+functions:
+  upload_image_to_s3:
+    handler: dist/upload_image_to_s3.handler
+    events:
+      - http:
+          path: upload
+          method: post
+          contentHandling: CONVERT_TO_BINARY
+    environment:
+      BUCKET_NAME: ${self:custom.passportS3Bucket}
+      PAYLOAD_QUEUE_URL: !Ref PayloadQueue
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - s3:PutObject
+        Resource: !Join ['', ['arn:aws:s3:::', '${self:custom.passportS3Bucket}', '/*']]
+      - Effect: Allow
+        Action:
+          - sqs:SendMessage
+        Resource: !GetAtt PayloadQueue.Arn
+
+  extract_info:
+    handler: dist/extract_info.handler
+    environment:
+      BUCKET_NAME: ${self:custom.passportS3Bucket}
+      REGION: ${self:provider.region}
+      PROCESSED_PAYLOAD_QUEUE_URL: !Ref ProcessedPayloadQueue
+      PROCESSED_PAYLOAD_SOCKET_QUEUE: !Ref ProcessedPayloadSocketQueue
+    events:
+      - sqs:
+          arn: !GetAtt PayloadQueue.Arn
+          batchSize: 1
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - textract:AnalyzeDocument
+        Resource: '*'
+      - Effect: Allow
+        Action:
+          - sqs:SendMessage
+        Resource: !GetAtt ProcessedPayloadQueue.Arn
+      - Effect: Allow
+        Action:
+          - sqs:SendMessage
+        Resource: !GetAtt ProcessedPayloadSocketQueue.Arn
+
+  add_to_db:
+    handler: dist/add_to_db.handler
+    environment:
+      DATABASE_HOST: ${ssm:DATABASE_HOST}
+      DATABASE_PORT: ${ssm:DATABASE_PORT}
+      DATABASE_NAME: ${ssm:DATABASE_NAME}
+      DATABASE_USER: ${ssm:DATABASE_USER}
+      DATABASE_PASSWORD: ${ssm:DATABASE_PASSWORD}
+    events:
+      - sqs:
+          arn: !GetAtt ProcessedPayloadQueue.Arn
+          batchSize: 1
+  
+resources:
+  Resources:
+    PayloadQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${ssm:PAYLOAD_QUEUE}
+    
+    ProcessedPayloadQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${ssm:PROCESSED_PAYLOAD_QUEUE} 
+    
+    ProcessedPayloadSocketQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: ${ssm:PROCESSED_PAYLOAD_SOCKET_QUEUE} 
+
+    TextractRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: textract.amazonaws.com
+              Action: sts:AssumeRole
+        Policies:
+          - PolicyName: TextractPolicy
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - textract:AnalyzeDocument
+                  Resource: '*'
+
+custom:
+  passportS3Bucket: ${ssm:S3_BUCKET}

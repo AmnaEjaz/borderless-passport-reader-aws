@@ -1,0 +1,41 @@
+{
+  "name": "borderless-passport-reader",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "sls offline -s dev",
+    "build": "tsc",
+    "deploy": "yarn build && serverless deploy"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.705.0",
+    "@aws-sdk/client-textract": "^3.699.0",
+    "@types/node": "^22.10.1",
+    "aws-sdk": "^2.1.1",
+    "parse-multipart": "^1.0.4",
+    "pg": "^8.13.1",
+    "serverless": "^4.4.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.16.0",
+    "@tsconfig/node20": "^20.1.4",
+    "@types/aws-lambda": "^8.10.85",
+    "@types/parse-multipart": "^1.0.2",
+    "@types/pg": "^8.11.10",
+    "aws-lambda": "^1.0.7",
+    "eslint": "^9.16.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.2.1",
+    "eslint-plugin-react": "^7.37.2",
+    "globals": "^15.13.0",
+    "prettier": "^3.4.2",
+    "serverless-offline": "^14.3.4",
+    "typescript-eslint": "^8.17.0"
+  }
+}
